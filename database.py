@@ -64,6 +64,7 @@ def get_seen_ids(platform: str = None) -> Set[str]:
     Returns:
         Set of listing IDs
     """
+    ensure_schema()  # Ensure table exists
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -91,6 +92,7 @@ def store_listings(listings: List[Listing]) -> int:
     if not listings:
         return 0
 
+    ensure_schema()  # Ensure table exists
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -136,6 +138,7 @@ def cleanup_old_listings(days: int = 7) -> int:
     Returns:
         Number of listings removed
     """
+    ensure_schema()  # Ensure table exists
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -154,6 +157,7 @@ def cleanup_old_listings(days: int = 7) -> int:
 
 def get_listing_count() -> dict:
     """Get count of listings by platform."""
+    ensure_schema()  # Ensure table exists
     conn = get_connection()
     cursor = conn.cursor()
 
