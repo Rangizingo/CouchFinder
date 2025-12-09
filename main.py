@@ -87,26 +87,25 @@ def run_monitor(skip_facebook: bool = False):
         logger.warning("Discord webhook test failed - notifications may not work")
 
     # Initialize scrapers
-    # Facebook first since it may need visible browser for login
+    # Initialize Craigslist FIRST to avoid asyncio conflicts
+    # (Facebook's playwright can create asyncio issues for sync playwright)
     scrapers = []
-    fb_scraper = None
-    shared_playwright = None
+
+    logger.info("Initializing Craigslist scraper...")
+    cl_scraper = CraigslistScraper()
+    # Initialize browser now to get playwright instance
+    cl_scraper._initialize_browser()
+    scrapers.append(cl_scraper)
 
     if not skip_facebook:
         logger.info("Initializing Facebook scraper...")
         try:
-            fb_scraper = FacebookScraper()
-            # Browser init is now lazy - will start headless and
-            # relaunch visible only if login is needed
-            scrapers.append(fb_scraper)
+            # Share playwright instance from Craigslist to avoid conflicts
+            fb_scraper = FacebookScraper(playwright_instance=cl_scraper.playwright)
+            scrapers.insert(0, fb_scraper)  # Facebook first in scrape order
         except Exception as e:
             logger.error(f"Failed to initialize Facebook scraper: {e}")
             logger.info("Continuing with Craigslist only")
-
-    logger.info("Initializing Craigslist scraper...")
-    # Pass shared playwright instance if available
-    cl_scraper = CraigslistScraper(playwright_instance=shared_playwright)
-    scrapers.append(cl_scraper)
 
     if not scrapers:
         logger.error("No scrapers available, exiting")
