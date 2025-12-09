@@ -45,13 +45,19 @@ class FacebookScraper(BaseScraper):
         self.context = None
         self.page = None
         self._initialized = False
+        self._headless = True  # Start headless by default
 
-    def _initialize_browser(self):
-        """Initialize Playwright with persistent context."""
+    def _initialize_browser(self, headless: bool = True):
+        """Initialize Playwright with persistent context.
+
+        Args:
+            headless: Whether to run browser in headless mode
+        """
         if self._initialized:
             return
 
-        logger.info("Initializing Facebook Marketplace browser...")
+        self._headless = headless
+        logger.info(f"Initializing Facebook Marketplace browser (headless={headless})...")
 
         # Start playwright if we don't have a shared instance
         if self.playwright is None:
@@ -64,7 +70,7 @@ class FacebookScraper(BaseScraper):
         # Launch persistent context (saves cookies/session)
         self.context = self.playwright.chromium.launch_persistent_context(
             str(BROWSER_DATA_DIR),
-            headless=HEADLESS,
+            headless=headless,
             viewport={"width": 1920, "height": 1080},
             user_agent=USER_AGENT,
             args=[
@@ -83,6 +89,18 @@ class FacebookScraper(BaseScraper):
 
         self._initialized = True
         logger.info("Browser initialized")
+
+    def _relaunch_visible(self):
+        """Close headless browser and relaunch with visible window for login."""
+        logger.info("Relaunching browser with visible window for login...")
+
+        # Close current context
+        if self.context:
+            self.context.close()
+            self.context = None
+
+        self._initialized = False
+        self._initialize_browser(headless=False)
 
     def _is_logged_in(self) -> bool:
         """Check if we're logged into Facebook."""
@@ -272,15 +290,20 @@ class FacebookScraper(BaseScraper):
             List of Listing objects
         """
         # Initialize browser on first call (lazy init to avoid asyncio conflicts)
+        # Start headless by default
         if not self._initialized:
-            self._initialize_browser()
+            self._initialize_browser(headless=True)
 
         # Check login status first
         if not self._is_logged_in():
             logger.warning("Not logged in to Facebook")
+            # Relaunch with visible window for login
+            self._relaunch_visible()
             if not self.wait_for_manual_login():
                 logger.error("Facebook login failed, skipping Facebook scrape")
                 return []
+            # After successful login, we can continue with the visible browser
+            # (next run will be headless since session is saved)
 
         all_listings = []
         seen_ids = set()

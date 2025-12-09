@@ -96,12 +96,9 @@ def run_monitor(skip_facebook: bool = False):
         logger.info("Initializing Facebook scraper...")
         try:
             fb_scraper = FacebookScraper()
-            # Trigger browser init now so user can log in
-            logger.info("Starting Facebook browser for login...")
-            fb_scraper._initialize_browser()
+            # Browser init is now lazy - will start headless and
+            # relaunch visible only if login is needed
             scrapers.append(fb_scraper)
-            # Share the playwright instance with Craigslist
-            shared_playwright = fb_scraper.playwright
         except Exception as e:
             logger.error(f"Failed to initialize Facebook scraper: {e}")
             logger.info("Continuing with Craigslist only")
