@@ -11,7 +11,7 @@ import argparse
 from datetime import datetime
 
 # Setup logging first
-from config import LOG_FILE, CHECK_INTERVAL_SECONDS, DISCORD_WEBHOOK_URL
+from config import LOG_FILE, CHECK_INTERVAL_SECONDS, DISCORD_WEBHOOK_CRAIGSLIST, DISCORD_WEBHOOK_FACEBOOK
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,9 +78,9 @@ def run_monitor(skip_facebook: bool = False):
     logger.info("Initializing database...")
     ensure_schema()
 
-    # Verify Discord webhook
-    if not DISCORD_WEBHOOK_URL:
-        logger.error("DISCORD_WEBHOOK_URL not configured in .env")
+    # Verify Discord webhooks
+    if not DISCORD_WEBHOOK_CRAIGSLIST and not DISCORD_WEBHOOK_FACEBOOK:
+        logger.error("No Discord webhooks configured in .env")
         return
 
     if not test_webhook():
