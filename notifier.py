@@ -195,32 +195,34 @@ def send_batch(listings: List[Listing]) -> int:
 
 
 def send_startup_message() -> bool:
-    """Send a startup notification to Discord."""
-    if not DISCORD_WEBHOOK_URL:
-        return False
-
+    """Send a startup notification to both platform channels."""
     payload = {
         "embeds": [{
             "title": "🛋️ CouchFinder Started",
-            "description": "Now monitoring Facebook Marketplace and Craigslist for new listings.",
+            "description": "Now monitoring for new listings.",
             "color": 0x00FF00,
             "timestamp": datetime.utcnow().isoformat(),
         }]
     }
 
-    try:
-        response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
-        return response.status_code == 204
-    except requests.RequestException as e:
-        logger.error(f"Failed to send startup message: {e}")
-        return False
+    success = False
+    # Send to each platform channel
+    for platform in ["craigslist", "facebook"]:
+        webhook_url = _get_webhook_url(platform)
+        if not webhook_url:
+            continue
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            if response.status_code == 204:
+                success = True
+        except requests.RequestException as e:
+            logger.error(f"Failed to send startup message to {platform}: {e}")
+
+    return success
 
 
 def send_error_message(error: str) -> bool:
-    """Send an error notification to Discord."""
-    if not DISCORD_WEBHOOK_URL:
-        return False
-
+    """Send an error notification to both platform channels."""
     payload = {
         "embeds": [{
             "title": "⚠️ CouchFinder Error",
@@ -230,21 +232,33 @@ def send_error_message(error: str) -> bool:
         }]
     }
 
-    try:
-        response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
-        return response.status_code == 204
-    except requests.RequestException:
-        return False
+    success = False
+    for platform in ["craigslist", "facebook"]:
+        webhook_url = _get_webhook_url(platform)
+        if not webhook_url:
+            continue
+        try:
+            response = requests.post(webhook_url, json=payload, timeout=10)
+            if response.status_code == 204:
+                success = True
+        except requests.RequestException:
+            pass
+
+    return success
 
 
 def test_webhook() -> bool:
-    """Test if the Discord webhook is valid and working."""
-    if not DISCORD_WEBHOOK_URL:
-        return False
+    """Test if at least one Discord webhook is valid and working."""
+    for platform in ["craigslist", "facebook"]:
+        webhook_url = _get_webhook_url(platform)
+        if not webhook_url:
+            continue
+        try:
+            # GET request to webhook URL returns webhook info
+            response = requests.get(webhook_url, timeout=10)
+            if response.status_code == 200:
+                return True
+        except requests.RequestException:
+            pass
 
-    try:
-        # GET request to webhook URL returns webhook info
-        response = requests.get(DISCORD_WEBHOOK_URL, timeout=10)
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
+    return False
