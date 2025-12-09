@@ -143,9 +143,15 @@ class CraigslistScraper(BaseScraper):
                 price_elem = card.find("span", class_="priceinfo")
                 price = price_elem.get_text(strip=True) if price_elem else None
 
-                # Extract image from the gallery
+                # Extract image from the gallery (check multiple attributes for lazy-loading)
                 img = card.find("img")
-                image_url = img.get("src") if img else None
+                image_url = None
+                if img:
+                    # Try data-src first (lazy-loaded), then src
+                    image_url = img.get("data-src") or img.get("src")
+                    # Skip placeholder/data URLs
+                    if image_url and (image_url.startswith("data:") or "blank" in image_url.lower()):
+                        image_url = None
 
                 # Location is not always present, default to Columbus
                 location = "Columbus, OH"
@@ -186,8 +192,12 @@ class CraigslistScraper(BaseScraper):
                     url = self._build_search_url(category, term)
                     logger.debug(f"Searching Craigslist: {term}")
 
-                    self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                    time.sleep(1)  # Brief wait for content
+                    self.page.goto(url, wait_until="networkidle", timeout=30000)
+                    # Wait for images to load
+                    time.sleep(2)
+                    # Scroll to trigger lazy-loading
+                    self.page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                    time.sleep(1)
 
                     html = self.page.content()
                     listings = self._parse_listings_from_html(html)

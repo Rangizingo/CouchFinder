@@ -128,6 +128,11 @@ Old listings (>7 days) are automatically cleaned up daily.
 - Check if columbus.craigslist.org is accessible
 - Craigslist blocks direct HTTP requests; we use Playwright browser
 
+### Craigslist images not showing in Discord
+- The scraper handles lazy-loaded images by checking `data-src` attribute
+- Scrolls page to trigger image loading before scraping
+- Placeholder/blank images are automatically filtered out
+
 ### High CPU/memory usage
 - Both scrapers use Chromium browsers
 - Consider increasing `CHECK_INTERVAL_SECONDS`
