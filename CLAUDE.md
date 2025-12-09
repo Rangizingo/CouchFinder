@@ -41,11 +41,12 @@ python main.py --check-deps
 
 ## First Run - Facebook Login
 
-On first run:
-1. Browser window opens to Facebook login
+The Facebook scraper runs **headless by default**. A visible browser window only opens when login is required:
+
+1. If not logged in, browser window opens to Facebook login
 2. Log in manually (you have 5 minutes)
 3. Session saves to `browser_data/` for future runs
-4. Subsequent runs use saved session automatically
+4. Subsequent runs stay headless (no visible window)
 
 ## Configuration
 
@@ -53,15 +54,16 @@ On first run:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DISCORD_WEBHOOK_URL` | (required) | Main Discord webhook (fallback) |
-| `DISCORD_WEBHOOK_CRAIGSLIST` | (optional) | Webhook for Craigslist-only channel |
-| `DISCORD_WEBHOOK_FACEBOOK` | (optional) | Webhook for Facebook-only channel |
+| `DISCORD_WEBHOOK_CRAIGSLIST` | (required) | Webhook for Craigslist channel |
+| `DISCORD_WEBHOOK_FACEBOOK` | (required) | Webhook for Facebook channel |
 | `CHECK_INTERVAL_SECONDS` | 60 | How often to check for new listings |
 | `MIN_PRICE` | 0 | Minimum price filter |
 | `MAX_PRICE` | 1000 | Maximum price filter |
 | `LOCATION_ZIP` | 43215 | Center of search area |
 | `LOCATION_RADIUS_MILES` | 100 | Search radius |
 | `HEADLESS` | false | Run browser without window |
+
+**Note:** Each platform sends notifications to its own Discord channel. Craigslist listings go only to the Craigslist webhook, Facebook listings go only to the Facebook webhook.
 
 ### Search Terms (config.py)
 
