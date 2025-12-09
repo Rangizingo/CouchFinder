@@ -82,7 +82,7 @@ class CraigslistScraper(BaseScraper):
             "min_price": MIN_PRICE,
             "max_price": MAX_PRICE,
             "sort": "date",  # Sort by newest
-            "searchNearby": 1,  # Include nearby areas
+            "searchNearby": 0,  # Columbus only (set to 1 for nearby areas)
             "postedToday": 0,  # Not just today
         }
         # Note: Craigslist doesn't have a "last 7 days" param directly,
