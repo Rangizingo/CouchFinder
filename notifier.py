@@ -9,7 +9,7 @@ import requests
 from typing import List
 from datetime import datetime
 
-from config import DISCORD_WEBHOOK_URL
+from config import DISCORD_WEBHOOK_URL, DISCORD_WEBHOOK_CRAIGSLIST, DISCORD_WEBHOOK_FACEBOOK
 from database import Listing
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,18 @@ logger = logging.getLogger(__name__)
 # Discord rate limit: 30 requests per minute
 RATE_LIMIT_DELAY = 2.1  # seconds between requests to stay under limit
 MAX_EMBEDS_PER_MESSAGE = 10
+
+
+def _get_webhook_url(platform: str) -> str:
+    """Get the appropriate webhook URL for a platform.
+
+    Falls back to main DISCORD_WEBHOOK_URL if platform-specific not set.
+    """
+    if platform == "craigslist" and DISCORD_WEBHOOK_CRAIGSLIST:
+        return DISCORD_WEBHOOK_CRAIGSLIST
+    elif platform == "facebook" and DISCORD_WEBHOOK_FACEBOOK:
+        return DISCORD_WEBHOOK_FACEBOOK
+    return DISCORD_WEBHOOK_URL
 
 
 def _get_platform_color(platform: str) -> int:
@@ -113,6 +125,9 @@ def send_batch(listings: List[Listing]) -> int:
     """
     Send multiple listings to Discord.
 
+    Listings are grouped by platform and sent to platform-specific webhooks
+    if configured, otherwise to the main webhook.
+
     Args:
         listings: List of listings to send
 
@@ -122,47 +137,59 @@ def send_batch(listings: List[Listing]) -> int:
     if not listings:
         return 0
 
-    if not DISCORD_WEBHOOK_URL:
-        logger.error("Discord webhook URL not configured")
-        return 0
+    # Group listings by platform
+    by_platform = {}
+    for listing in listings:
+        platform = listing.platform
+        if platform not in by_platform:
+            by_platform[platform] = []
+        by_platform[platform].append(listing)
 
     sent = 0
 
-    # Send in batches of MAX_EMBEDS_PER_MESSAGE
-    for i in range(0, len(listings), MAX_EMBEDS_PER_MESSAGE):
-        batch = listings[i:i + MAX_EMBEDS_PER_MESSAGE]
-        embeds = [_create_embed(listing) for listing in batch]
+    # Send each platform's listings to its webhook
+    for platform, platform_listings in by_platform.items():
+        webhook_url = _get_webhook_url(platform)
 
-        payload = {"embeds": embeds}
+        if not webhook_url:
+            logger.error(f"No webhook URL configured for {platform}")
+            continue
 
-        try:
-            response = requests.post(
-                DISCORD_WEBHOOK_URL,
-                json=payload,
-                timeout=10
-            )
+        # Send in batches of MAX_EMBEDS_PER_MESSAGE
+        for i in range(0, len(platform_listings), MAX_EMBEDS_PER_MESSAGE):
+            batch = platform_listings[i:i + MAX_EMBEDS_PER_MESSAGE]
+            embeds = [_create_embed(listing) for listing in batch]
 
-            if response.status_code == 204:
-                sent += len(batch)
-                logger.info(f"Sent batch of {len(batch)} listings")
-            elif response.status_code == 429:
-                # Rate limited
-                retry_after = response.json().get("retry_after", 5)
-                logger.warning(f"Rate limited, waiting {retry_after}s")
-                time.sleep(retry_after)
-                # Retry this batch
-                response = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+            payload = {"embeds": embeds}
+
+            try:
+                response = requests.post(
+                    webhook_url,
+                    json=payload,
+                    timeout=10
+                )
+
                 if response.status_code == 204:
                     sent += len(batch)
-            else:
-                logger.error(f"Discord error {response.status_code}: {response.text}")
+                    logger.info(f"Sent batch of {len(batch)} {platform} listings")
+                elif response.status_code == 429:
+                    # Rate limited
+                    retry_after = response.json().get("retry_after", 5)
+                    logger.warning(f"Rate limited, waiting {retry_after}s")
+                    time.sleep(retry_after)
+                    # Retry this batch
+                    response = requests.post(webhook_url, json=payload, timeout=10)
+                    if response.status_code == 204:
+                        sent += len(batch)
+                else:
+                    logger.error(f"Discord error {response.status_code}: {response.text}")
 
-        except requests.RequestException as e:
-            logger.error(f"Failed to send batch: {e}")
+            except requests.RequestException as e:
+                logger.error(f"Failed to send {platform} batch: {e}")
 
-        # Rate limit delay between batches
-        if i + MAX_EMBEDS_PER_MESSAGE < len(listings):
-            time.sleep(RATE_LIMIT_DELAY)
+            # Rate limit delay between batches
+            if i + MAX_EMBEDS_PER_MESSAGE < len(platform_listings):
+                time.sleep(RATE_LIMIT_DELAY)
 
     return sent
 

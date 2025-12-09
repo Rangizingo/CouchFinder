@@ -53,7 +53,9 @@ On first run:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DISCORD_WEBHOOK_URL` | (required) | Discord webhook for notifications |
+| `DISCORD_WEBHOOK_URL` | (required) | Main Discord webhook (fallback) |
+| `DISCORD_WEBHOOK_CRAIGSLIST` | (optional) | Webhook for Craigslist-only channel |
+| `DISCORD_WEBHOOK_FACEBOOK` | (optional) | Webhook for Facebook-only channel |
 | `CHECK_INTERVAL_SECONDS` | 60 | How often to check for new listings |
 | `MIN_PRICE` | 0 | Minimum price filter |
 | `MAX_PRICE` | 1000 | Maximum price filter |

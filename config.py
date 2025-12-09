@@ -13,8 +13,10 @@ load_dotenv()
 # Base directory (where this script lives)
 BASE_DIR = Path(__file__).parent.resolve()
 
-# Discord
+# Discord webhooks (separate channels for each platform)
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
+DISCORD_WEBHOOK_CRAIGSLIST = os.getenv("DISCORD_WEBHOOK_CRAIGSLIST", "")
+DISCORD_WEBHOOK_FACEBOOK = os.getenv("DISCORD_WEBHOOK_FACEBOOK", "")
 
 # Location
 LOCATION_ZIP = os.getenv("LOCATION_ZIP", "43215")
