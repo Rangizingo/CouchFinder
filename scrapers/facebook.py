@@ -318,6 +318,10 @@ class FacebookScraper(BaseScraper):
                 # Wait for listings to load
                 time.sleep(3)
 
+                # Click sort dropdown and select "Date listed: Newest first"
+                # Facebook ignores the URL sortBy parameter, so we must click it
+                self._select_newest_sort()
+
                 # Scroll to load more (optional, can be slow)
                 # self._scroll_page()
 
@@ -343,6 +347,81 @@ class FacebookScraper(BaseScraper):
 
         logger.info(f"Facebook: Found {len(all_listings)} listings")
         return all_listings
+
+    def _dismiss_login_popup(self):
+        """Dismiss the 'See more on Facebook' login popup if present."""
+        try:
+            # Look for the X close button on the login popup
+            close_selectors = [
+                '[aria-label="Close"]',
+                'div[aria-label="Close"]',
+                'svg[aria-label="Close"]',
+                'div[role="dialog"] div[role="button"]:has(svg)',  # X button in dialog
+            ]
+
+            for selector in close_selectors:
+                try:
+                    close_btn = self.page.locator(selector).first
+                    if close_btn.is_visible(timeout=1000):
+                        close_btn.click()
+                        logger.debug("Dismissed login popup")
+                        time.sleep(1)
+                        return True
+                except Exception:
+                    continue
+
+            # Also try pressing Escape key to close any modal
+            self.page.keyboard.press("Escape")
+            time.sleep(0.5)
+
+        except Exception as e:
+            logger.debug(f"No login popup to dismiss: {e}")
+
+        return False
+
+    def _select_newest_sort(self):
+        """Click the sort dropdown and select 'Date listed: Newest first'."""
+        try:
+            # First dismiss any login popup that might be blocking
+            self._dismiss_login_popup()
+            # Look for the sort dropdown - Facebook uses various selectors
+            # Try clicking on "Sort by" or the current sort option
+            sort_button = None
+
+            # Try multiple selectors for the sort button
+            selectors = [
+                'span:has-text("Sort by")',
+                'span:has-text("Suggested")',
+                '[aria-label*="Sort"]',
+                'div[role="button"]:has-text("Sort")',
+            ]
+
+            for selector in selectors:
+                try:
+                    element = self.page.locator(selector).first
+                    if element.is_visible(timeout=2000):
+                        sort_button = element
+                        break
+                except Exception:
+                    continue
+
+            if sort_button:
+                sort_button.click()
+                time.sleep(1)
+
+                # Now click "Date listed: Newest first"
+                newest_option = self.page.locator('span:has-text("Date listed: Newest first")').first
+                if newest_option.is_visible(timeout=3000):
+                    newest_option.click()
+                    time.sleep(2)  # Wait for results to reload
+                    logger.debug("Selected 'Date listed: Newest first' sort option")
+                else:
+                    logger.warning("Could not find 'Date listed: Newest first' option")
+            else:
+                logger.warning("Could not find sort dropdown button")
+
+        except Exception as e:
+            logger.warning(f"Could not select newest sort: {e}")
 
     def _scroll_page(self, scroll_count: int = 3):
         """Scroll page to load more listings."""

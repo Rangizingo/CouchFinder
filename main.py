@@ -36,7 +36,11 @@ running = True
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
     global running
-    logger.info("Shutdown signal received, stopping...")
+    if not running:
+        # Second Ctrl+C = force exit immediately
+        logger.info("Force exit...")
+        sys.exit(1)
+    logger.info("Shutdown signal received, stopping... (press Ctrl+C again to force)")
     running = False
 
 
@@ -173,10 +177,13 @@ def run_monitor(skip_facebook: bool = False):
                 logger.info(f"Cleanup: removed {removed} old listings")
                 last_cleanup = datetime.now()
 
-            # Wait for next check
+            # Wait for next check (use short sleeps so Ctrl+C responds quickly)
             if running:
                 logger.debug(f"Sleeping {CHECK_INTERVAL_SECONDS}s until next check...")
-                time.sleep(CHECK_INTERVAL_SECONDS)
+                for _ in range(CHECK_INTERVAL_SECONDS):
+                    if not running:
+                        break
+                    time.sleep(1)
 
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
