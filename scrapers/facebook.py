@@ -6,7 +6,7 @@ Playwright-based scraper with persistent authentication.
 import re
 import logging
 import time
-from typing import List
+from typing import List, Set, Optional, Tuple
 from urllib.parse import urlencode, quote_plus
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -206,25 +206,43 @@ class FacebookScraper(BaseScraper):
         # Fallback
         return f"fb_{hash(url)}"
 
-    def _parse_listings(self, html: str) -> List[Listing]:
-        """Parse listing cards from page HTML."""
+    def _parse_listings(self, html: str, db_seen_ids: Optional[Set[str]] = None) -> Tuple[List[Listing], bool]:
+        """Parse listing cards from page HTML with early stop optimization.
+
+        Args:
+            html: Page HTML content
+            db_seen_ids: Set of listing IDs already in database. If provided,
+                         stops parsing when a known ID is encountered.
+
+        Returns:
+            Tuple of (list of new Listing objects, whether early stop was triggered)
+        """
         soup = BeautifulSoup(html, "html.parser")
         listings = []
+        early_stopped = False
 
         # Facebook's structure changes frequently, try multiple selectors
         # Look for links to marketplace items
         item_links = soup.find_all("a", href=re.compile(r"/marketplace/item/\d+"))
 
-        seen_ids = set()
+        page_seen_ids = set()  # Dedupe within this page
 
         for link in item_links:
             try:
                 href = link.get("href", "")
                 listing_id = self._extract_id(href)
 
-                if listing_id in seen_ids:
+                # Dedupe within page
+                if listing_id in page_seen_ids:
                     continue
-                seen_ids.add(listing_id)
+                page_seen_ids.add(listing_id)
+
+                # Early stop: if we hit a listing already in DB, stop parsing
+                # (results are sorted newest-first, so everything below is older)
+                if db_seen_ids and listing_id in db_seen_ids:
+                    logger.debug(f"Early stop: hit known listing {listing_id}")
+                    early_stopped = True
+                    break
 
                 # Build full URL
                 if href.startswith("/"):
@@ -280,14 +298,18 @@ class FacebookScraper(BaseScraper):
                 logger.debug(f"Error parsing listing card: {e}")
                 continue
 
-        return listings
+        return listings, early_stopped
 
-    def get_listings(self) -> List[Listing]:
+    def get_listings(self, seen_ids: Optional[Set[str]] = None) -> List[Listing]:
         """
         Fetch current listings from Facebook Marketplace.
 
+        Args:
+            seen_ids: Optional set of listing IDs already in database.
+                      If provided, scraper will stop early when it hits a known ID.
+
         Returns:
-            List of Listing objects
+            List of Listing objects (only new ones if seen_ids provided)
         """
         # Initialize browser on first call (lazy init to avoid asyncio conflicts)
         # Start headless by default
@@ -306,12 +328,12 @@ class FacebookScraper(BaseScraper):
             # (next run will be headless since session is saved)
 
         all_listings = []
-        seen_ids = set()
+        page_seen_ids = set()  # Dedupe across search terms within this cycle
 
         for term in SEARCH_TERMS:
             try:
                 url = self._build_search_url(term)
-                logger.debug(f"Searching Facebook: {term}")
+                logger.info(f"Searching Facebook: {term}")
 
                 self.page.goto(url, wait_until="domcontentloaded", timeout=30000)
 
@@ -328,13 +350,18 @@ class FacebookScraper(BaseScraper):
                 # Get page content
                 html = self.page.content()
 
-                # Parse listings
-                listings = self._parse_listings(html)
+                # Parse listings with early stop if seen_ids provided
+                listings, early_stopped = self._parse_listings(html, seen_ids)
 
-                # Deduplicate
+                if early_stopped:
+                    logger.info(f"Facebook '{term}': early stop triggered, {len(listings)} new listings")
+                else:
+                    logger.debug(f"Facebook '{term}': {len(listings)} listings parsed")
+
+                # Deduplicate across search terms
                 for listing in listings:
-                    if listing.id not in seen_ids:
-                        seen_ids.add(listing.id)
+                    if listing.id not in page_seen_ids:
+                        page_seen_ids.add(listing.id)
                         all_listings.append(listing)
 
             except PlaywrightTimeout as e:

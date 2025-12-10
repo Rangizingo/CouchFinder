@@ -37,31 +37,23 @@ BROWSER_DATA_DIR = BASE_DIR / os.getenv("BROWSER_DATA_DIR", "browser_data")
 # Browser settings
 HEADLESS = os.getenv("HEADLESS", "false").lower() == "true"
 
-# Search terms for couches/sofas (prioritized - most common first)
+# Search terms for sectionals only
 SEARCH_TERMS = [
+    "sectional",
+    "L-shaped",
+    "U-shaped",
+    "modular sofa",
+]
+
+# Extended search terms (not currently used, kept for reference)
+EXTENDED_SEARCH_TERMS = [
     "couch",
     "sofa",
-    "sectional",
     "loveseat",
     "futon",
     "sleeper sofa",
     "chaise",
     "recliner sofa",
-]
-
-# Extended search terms (used for more thorough searches)
-EXTENDED_SEARCH_TERMS = [
-    "love seat",
-    "chesterfield",
-    "davenport",
-    "settee",
-    "divan",
-    "sofa bed",
-    "chaise lounge",
-    "L-shaped",
-    "U-shaped",
-    "modular",
-    "reclining couch",
 ]
 
 # Craigslist settings

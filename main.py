@@ -137,31 +137,27 @@ def run_monitor(skip_facebook: bool = False):
 
             for scraper in scrapers:
                 try:
-                    # Get current listings
-                    listings = scraper.get_listings()
+                    # Get seen IDs upfront so scraper can stop early
+                    seen_ids = get_seen_ids(scraper.platform)
 
-                    if not listings:
-                        logger.debug(f"{scraper.platform}: No listings found")
+                    # Get new listings (scraper will stop early when it hits known IDs)
+                    new_listings = scraper.get_listings(seen_ids)
+
+                    if not new_listings:
+                        logger.debug(f"{scraper.platform}: No new listings")
                         continue
 
-                    # Filter out already-seen listings
-                    seen_ids = get_seen_ids(scraper.platform)
-                    new_listings = [l for l in listings if l.id not in seen_ids]
+                    logger.info(f"{scraper.platform}: {len(new_listings)} new listings")
 
-                    if new_listings:
-                        logger.info(f"{scraper.platform}: {len(new_listings)} new listings")
+                    # Send notifications
+                    sent = send_batch(new_listings)
+                    logger.info(f"Sent {sent} notifications to Discord")
 
-                        # Send notifications
-                        sent = send_batch(new_listings)
-                        logger.info(f"Sent {sent} notifications to Discord")
+                    # Store in database
+                    stored = store_listings(new_listings)
+                    logger.info(f"Stored {stored} listings in database")
 
-                        # Store in database
-                        stored = store_listings(new_listings)
-                        logger.info(f"Stored {stored} listings in database")
-
-                        total_new += len(new_listings)
-                    else:
-                        logger.debug(f"{scraper.platform}: No new listings")
+                    total_new += len(new_listings)
 
                 except Exception as e:
                     logger.error(f"Error scraping {scraper.platform}: {e}", exc_info=True)

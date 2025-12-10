@@ -6,7 +6,7 @@ Playwright-based scraper for Craigslist listings.
 import re
 import logging
 import time
-from typing import List
+from typing import List, Set, Optional, Tuple
 from urllib.parse import urlencode
 
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
@@ -103,10 +103,20 @@ class CraigslistScraper(BaseScraper):
             return f"cl_{match.group(1)}"
         return f"cl_{hash(url)}"
 
-    def _parse_listings_from_html(self, html: str) -> List[Listing]:
-        """Parse listings from search results HTML."""
+    def _parse_listings_from_html(self, html: str, db_seen_ids: Optional[Set[str]] = None) -> Tuple[List[Listing], bool]:
+        """Parse listings from search results HTML with early stop optimization.
+
+        Args:
+            html: Page HTML content
+            db_seen_ids: Set of listing IDs already in database. If provided,
+                         stops parsing when a known ID is encountered.
+
+        Returns:
+            Tuple of (list of new Listing objects, whether early stop was triggered)
+        """
         soup = BeautifulSoup(html, "html.parser")
         listings = []
+        early_stopped = False
 
         # Craigslist uses gallery-card divs for search results
         cards = soup.find_all("div", class_="gallery-card")
@@ -132,6 +142,13 @@ class CraigslistScraper(BaseScraper):
                     url = href
 
                 listing_id = self._extract_id(url)
+
+                # Early stop: if we hit a listing already in DB, stop parsing
+                # (results are sorted newest-first, so everything below is older)
+                if db_seen_ids and listing_id in db_seen_ids:
+                    logger.debug(f"Early stop: hit known listing {listing_id}")
+                    early_stopped = True
+                    break
 
                 # Extract title from span.label inside the link
                 title_elem = link.find("span", class_="label")
@@ -170,27 +187,31 @@ class CraigslistScraper(BaseScraper):
                 logger.debug(f"Error parsing Craigslist listing: {e}")
                 continue
 
-        return listings
+        return listings, early_stopped
 
-    def get_listings(self) -> List[Listing]:
+    def get_listings(self, seen_ids: Optional[Set[str]] = None) -> List[Listing]:
         """
         Fetch current listings from Craigslist.
 
+        Args:
+            seen_ids: Optional set of listing IDs already in database.
+                      If provided, scraper will stop early when it hits a known ID.
+
         Returns:
-            List of Listing objects
+            List of Listing objects (only new ones if seen_ids provided)
         """
         # Lazy init browser on first call
         if not self._initialized:
             self._initialize_browser()
 
-        seen_ids = set()
+        page_seen_ids = set()  # Dedupe across search terms within this cycle
         all_listings = []
 
         for category in CRAIGSLIST_CATEGORIES:
             for term in SEARCH_TERMS:
                 try:
                     url = self._build_search_url(category, term)
-                    logger.debug(f"Searching Craigslist: {term}")
+                    logger.info(f"Searching Craigslist: {term}")
 
                     self.page.goto(url, wait_until="networkidle", timeout=30000)
                     # Wait for images to load
@@ -200,12 +221,17 @@ class CraigslistScraper(BaseScraper):
                     time.sleep(1)
 
                     html = self.page.content()
-                    listings = self._parse_listings_from_html(html)
+                    listings, early_stopped = self._parse_listings_from_html(html, seen_ids)
 
-                    # Deduplicate
+                    if early_stopped:
+                        logger.info(f"Craigslist '{term}': early stop triggered, {len(listings)} new listings")
+                    else:
+                        logger.debug(f"Craigslist '{term}': {len(listings)} listings parsed")
+
+                    # Deduplicate across search terms
                     for listing in listings:
-                        if listing.id not in seen_ids:
-                            seen_ids.add(listing.id)
+                        if listing.id not in page_seen_ids:
+                            page_seen_ids.add(listing.id)
                             all_listings.append(listing)
 
                 except PlaywrightTimeout as e:
@@ -216,7 +242,7 @@ class CraigslistScraper(BaseScraper):
                 # Small delay between requests
                 time.sleep(0.5)
 
-        logger.info(f"Craigslist: Found {len(all_listings)} listings")
+        logger.info(f"Craigslist: Found {len(all_listings)} new listings")
         return all_listings
 
     def close(self):

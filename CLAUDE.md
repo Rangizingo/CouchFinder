@@ -1,12 +1,14 @@
 # CouchFinder
 
-Real-time marketplace monitor for couches/sofas on Facebook Marketplace and Craigslist. Sends Discord notifications when new listings appear.
+Real-time marketplace monitor for sectionals on Facebook Marketplace and Craigslist. Sends Discord notifications when new listings appear.
 
 ## Features
 
 - Monitors Facebook Marketplace and Craigslist Columbus
-- Searches for couches, sofas, sectionals, loveseats, futons, etc.
+- Searches for sectionals (sectional, L-shaped, U-shaped, modular sofa)
 - Filters by price range ($0-$1000) and date (last 7 days)
+- **Early stop optimization**: Stops parsing when it hits a known listing (faster cycles)
+- **Sorted by newest first**: Facebook and Craigslist results sorted by date listed
 - Sends Discord notifications with title, price, image, and link
 - SQLite database prevents duplicate notifications
 - Persistent browser session (login once, stays logged in)
@@ -67,9 +69,11 @@ The Facebook scraper runs **headless by default**. A visible browser window only
 
 ### Search Terms (config.py)
 
-Primary terms searched:
-- couch, sofa, sectional, loveseat
-- futon, sleeper sofa, chaise, recliner sofa
+Current search terms (sectionals only):
+- sectional
+- L-shaped
+- U-shaped
+- modular sofa
 
 ## Project Structure
 
@@ -94,12 +98,19 @@ CouchFinder/
 
 ## How It Works
 
-1. **Initialization**: Starts Playwright browser, loads saved Facebook session
-2. **Scraping**: Searches each term on both platforms
-3. **Deduplication**: Checks SQLite DB for already-seen listing IDs
-4. **Notification**: Sends new listings to Discord as embeds
-5. **Storage**: Saves new listing IDs to prevent future duplicates
-6. **Loop**: Waits `CHECK_INTERVAL_SECONDS`, repeats
+1. **Initialization**: Starts Playwright browser (headless), loads saved Facebook session
+2. **Query DB**: Gets all previously-seen listing IDs for the platform
+3. **Scraping**: For each search term:
+   - Loads search results sorted by "Date listed: Newest first"
+   - Parses listings top-to-bottom (newest first)
+   - **Early stop**: When a known listing ID is hit, stops parsing (everything below is older)
+   - Collects only NEW listings above that point
+4. **Deduplication**: Dedupes across search terms (same listing may appear in multiple searches)
+5. **Notification**: Sends new listings to Discord as embeds
+6. **Storage**: Saves new listing IDs to database
+7. **Loop**: Waits `CHECK_INTERVAL_SECONDS` (60s), repeats
+
+**Cycle time**: ~20 seconds when no new listings (early stop kicks in immediately), ~2 minutes on first run or when many new listings.
 
 ## Database Schema
 
