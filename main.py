@@ -61,34 +61,16 @@ def ensure_dependencies():
 
 
 def ensure_env_file():
-    """Create .env file if it doesn't exist, prompt for webhook URLs."""
+    """Create .env file if it doesn't exist (webhooks are hardcoded in config.py)."""
     env_file = BASE_DIR / ".env"
-    env_example = BASE_DIR / ".env.example"
 
     if env_file.exists():
         return
 
-    print("\n" + "=" * 50)
-    print("FIRST TIME SETUP - Discord Webhook Configuration")
-    print("=" * 50)
-    print("\nNo .env file found. Let's set up your Discord webhooks.")
-    print("(You can edit .env later to change these)\n")
-
-    # Get webhook URLs from user
-    print("Create webhooks in Discord: Server Settings > Integrations > Webhooks")
-    print()
-
-    craigslist_webhook = input("Craigslist Discord webhook URL: ").strip()
-    facebook_webhook = input("Facebook Discord webhook URL: ").strip()
-
-    # Create .env content
-    env_content = f"""# Discord webhook URLs for notifications
-# Platform-specific webhooks - each platform goes to its own channel
-DISCORD_WEBHOOK_CRAIGSLIST={craigslist_webhook}
-DISCORD_WEBHOOK_FACEBOOK={facebook_webhook}
-
-# Main webhook (leave empty - not used when platform-specific are set)
-DISCORD_WEBHOOK_URL=
+    # Create default .env (webhooks are hardcoded in config.py as fallbacks)
+    env_content = """# CouchFinder Configuration
+# Discord webhooks are hardcoded in config.py - no need to set here
+# You can override them here if needed
 
 # Location settings
 LOCATION_ZIP=43215
@@ -107,15 +89,13 @@ LOG_FILE=couchfinder.log
 BROWSER_DATA_DIR=browser_data
 
 # Set to true to run browser in headless mode (no visible window)
-# Keep false for initial setup to allow manual Facebook login
 HEADLESS=false
 """
 
     with open(env_file, "w") as f:
         f.write(env_content)
 
-    print(f"\nCreated {env_file}")
-    print("You can edit this file anytime to change settings.\n")
+    print(f"Created default config: {env_file}")
 
 
 # === AUTO-SETUP ON IMPORT ===

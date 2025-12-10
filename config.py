@@ -14,9 +14,16 @@ load_dotenv()
 BASE_DIR = Path(__file__).parent.resolve()
 
 # Discord webhooks (separate channels for each platform)
+# Hardcoded for automatic setup - repo is private
 DISCORD_WEBHOOK_URL = os.getenv("DISCORD_WEBHOOK_URL", "")
-DISCORD_WEBHOOK_CRAIGSLIST = os.getenv("DISCORD_WEBHOOK_CRAIGSLIST", "")
-DISCORD_WEBHOOK_FACEBOOK = os.getenv("DISCORD_WEBHOOK_FACEBOOK", "")
+DISCORD_WEBHOOK_CRAIGSLIST = os.getenv(
+    "DISCORD_WEBHOOK_CRAIGSLIST",
+    "https://discord.com/api/webhooks/1448061060501209230/mp2Cl13jbuo3R96wB72rq0bRjByGkyDGbulLA48bEUOkPBpVYiJ1juOAUyFeTqukBCOV"
+)
+DISCORD_WEBHOOK_FACEBOOK = os.getenv(
+    "DISCORD_WEBHOOK_FACEBOOK",
+    "https://discord.com/api/webhooks/1448060837939122178/siZ9df0Gb1mjyHMWcDM4aW6G7dMnwYQTpaFQqfeEwGNQzvrUAbz10DrqZakb5KBHdvSz"
+)
 
 # Location
 LOCATION_ZIP = os.getenv("LOCATION_ZIP", "43215")
