@@ -32,6 +32,9 @@ On first run, the script will:
 # Full monitoring (Facebook + Craigslist)
 python main.py
 
+# First run on new PC (populate DB without notification flood)
+python main.py --silent-first-run
+
 # Craigslist only (no Facebook)
 python main.py --skip-facebook
 ```

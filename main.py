@@ -171,12 +171,13 @@ def signal_handler(signum, frame):
     running = False
 
 
-def run_monitor(skip_facebook: bool = False):
+def run_monitor(skip_facebook: bool = False, silent_first_run: bool = False):
     """
     Main monitoring loop.
 
     Args:
         skip_facebook: If True, only monitor Craigslist (useful for testing)
+        silent_first_run: If True, skip notifications on first run when DB is empty
     """
     global running
 
@@ -187,6 +188,14 @@ def run_monitor(skip_facebook: bool = False):
     # Ensure database schema exists
     logger.info("Initializing database...")
     ensure_schema()
+
+    # Check if this is first run (empty DB) for silent mode
+    first_run_silent = False
+    if silent_first_run:
+        counts = get_listing_count()
+        if counts.get('facebook', 0) == 0 and counts.get('craigslist', 0) == 0:
+            first_run_silent = True
+            logger.info("First run detected - notifications disabled for initial DB population")
 
     # Verify Discord webhooks
     if not DISCORD_WEBHOOK_CRAIGSLIST and not DISCORD_WEBHOOK_FACEBOOK:
@@ -255,9 +264,12 @@ def run_monitor(skip_facebook: bool = False):
 
                     logger.info(f"{scraper.platform}: {len(new_listings)} new listings")
 
-                    # Send notifications
-                    sent = send_batch(new_listings)
-                    logger.info(f"Sent {sent} notifications to Discord")
+                    # Send notifications (skip if first run silent mode)
+                    if first_run_silent:
+                        logger.info("Skipping notifications (first run silent mode)")
+                    else:
+                        sent = send_batch(new_listings)
+                        logger.info(f"Sent {sent} notifications to Discord")
 
                     # Store in database
                     stored = store_listings(new_listings)
@@ -271,6 +283,11 @@ def run_monitor(skip_facebook: bool = False):
             # Summary
             counts = get_listing_count()
             logger.info(f"Total new this check: {total_new} | DB totals: {counts}")
+
+            # Turn off silent mode after first run completes
+            if first_run_silent:
+                first_run_silent = False
+                logger.info("First run complete - notifications enabled for future checks")
 
             # Daily cleanup (every 24 hours)
             hours_since_cleanup = (datetime.now() - last_cleanup).total_seconds() / 3600
@@ -312,9 +329,14 @@ def main():
         action="store_true",
         help="Skip Facebook Marketplace (Craigslist only)",
     )
+    parser.add_argument(
+        "--silent-first-run",
+        action="store_true",
+        help="Skip notifications on first run when DB is empty (populates DB silently)",
+    )
 
     args = parser.parse_args()
-    run_monitor(skip_facebook=args.skip_facebook)
+    run_monitor(skip_facebook=args.skip_facebook, silent_first_run=args.silent_first_run)
 
 
 if __name__ == "__main__":
