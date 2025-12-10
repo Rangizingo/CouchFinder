@@ -16,17 +16,15 @@ Real-time marketplace monitor for sectionals on Facebook Marketplace and Craigsl
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-python -m playwright install chromium
-
-# Configure
-cp .env.example .env
-# Edit .env with your Discord webhook URL
-
-# Run
+# Just run it - everything auto-installs on first run!
 python main.py
 ```
+
+On first run, the script will:
+1. Auto-install all Python dependencies (playwright, beautifulsoup4, etc.)
+2. Auto-install Playwright Chromium browser
+3. Prompt you for Discord webhook URLs (creates .env file)
+4. Start monitoring
 
 ## Usage
 
@@ -36,9 +34,6 @@ python main.py
 
 # Craigslist only (no Facebook)
 python main.py --skip-facebook
-
-# Check/install dependencies
-python main.py --check-deps
 ```
 
 ## First Run - Facebook Login

@@ -1,16 +1,144 @@
 """
 CouchFinder - Marketplace Monitor
 Main entry point and orchestration loop.
+
+Auto-installs all dependencies on first run.
 """
 
 import sys
+import os
+import subprocess
+from pathlib import Path
+
+# Get base directory before any other imports
+BASE_DIR = Path(__file__).parent.resolve()
+
+
+def ensure_dependencies():
+    """
+    Auto-install all dependencies. Run BEFORE other imports.
+    Returns True if restart is needed (new packages installed).
+    """
+    needs_restart = False
+
+    # Required packages from requirements.txt
+    required_packages = [
+        ("playwright", "playwright>=1.40.0"),
+        ("playwright_stealth", "playwright-stealth>=2.0.0"),
+        ("bs4", "beautifulsoup4>=4.12.0"),
+        ("requests", "requests>=2.31.0"),
+        ("dotenv", "python-dotenv>=1.0.0"),
+    ]
+
+    for import_name, pip_name in required_packages:
+        try:
+            __import__(import_name)
+        except ImportError:
+            print(f"Installing {pip_name}...")
+            subprocess.check_call(
+                [sys.executable, "-m", "pip", "install", pip_name],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            needs_restart = True
+
+    # Check Playwright Chromium browser
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            # Try to launch to verify it's installed
+            browser = p.chromium.launch(headless=True)
+            browser.close()
+    except Exception:
+        print("Installing Playwright Chromium browser (this may take a minute)...")
+        subprocess.check_call(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            stdout=subprocess.DEVNULL
+        )
+        needs_restart = True
+
+    return needs_restart
+
+
+def ensure_env_file():
+    """Create .env file if it doesn't exist, prompt for webhook URLs."""
+    env_file = BASE_DIR / ".env"
+    env_example = BASE_DIR / ".env.example"
+
+    if env_file.exists():
+        return
+
+    print("\n" + "=" * 50)
+    print("FIRST TIME SETUP - Discord Webhook Configuration")
+    print("=" * 50)
+    print("\nNo .env file found. Let's set up your Discord webhooks.")
+    print("(You can edit .env later to change these)\n")
+
+    # Get webhook URLs from user
+    print("Create webhooks in Discord: Server Settings > Integrations > Webhooks")
+    print()
+
+    craigslist_webhook = input("Craigslist Discord webhook URL: ").strip()
+    facebook_webhook = input("Facebook Discord webhook URL: ").strip()
+
+    # Create .env content
+    env_content = f"""# Discord webhook URLs for notifications
+# Platform-specific webhooks - each platform goes to its own channel
+DISCORD_WEBHOOK_CRAIGSLIST={craigslist_webhook}
+DISCORD_WEBHOOK_FACEBOOK={facebook_webhook}
+
+# Main webhook (leave empty - not used when platform-specific are set)
+DISCORD_WEBHOOK_URL=
+
+# Location settings
+LOCATION_ZIP=43215
+LOCATION_RADIUS_MILES=100
+
+# Price range
+MIN_PRICE=0
+MAX_PRICE=1000
+
+# How often to check for new listings (in seconds)
+CHECK_INTERVAL_SECONDS=60
+
+# File paths (relative to script directory)
+DATABASE_FILE=couchfinder.db
+LOG_FILE=couchfinder.log
+BROWSER_DATA_DIR=browser_data
+
+# Set to true to run browser in headless mode (no visible window)
+# Keep false for initial setup to allow manual Facebook login
+HEADLESS=false
+"""
+
+    with open(env_file, "w") as f:
+        f.write(env_content)
+
+    print(f"\nCreated {env_file}")
+    print("You can edit this file anytime to change settings.\n")
+
+
+# === AUTO-SETUP ON IMPORT ===
+# This runs before anything else when main.py is executed
+
+if __name__ == "__main__":
+    # Step 1: Install missing pip packages and playwright browser
+    print("Checking dependencies...")
+    if ensure_dependencies():
+        print("Dependencies installed. Restarting...")
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    # Step 2: Ensure .env exists
+    ensure_env_file()
+
+# === NOW SAFE TO IMPORT EVERYTHING ===
+
 import time
 import signal
 import logging
 import argparse
 from datetime import datetime
 
-# Setup logging first
 from config import LOG_FILE, CHECK_INTERVAL_SECONDS, DISCORD_WEBHOOK_CRAIGSLIST, DISCORD_WEBHOOK_FACEBOOK
 
 logging.basicConfig(
@@ -23,7 +151,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("CouchFinder")
 
-# Now import other modules
 from database import ensure_schema, get_seen_ids, store_listings, cleanup_old_listings, get_listing_count
 from notifier import send_batch, send_startup_message, send_error_message, test_webhook
 from scrapers import CraigslistScraper, FacebookScraper
@@ -42,27 +169,6 @@ def signal_handler(signum, frame):
         sys.exit(1)
     logger.info("Shutdown signal received, stopping... (press Ctrl+C again to force)")
     running = False
-
-
-def check_dependencies():
-    """Check and install missing dependencies."""
-    try:
-        import playwright
-    except ImportError:
-        logger.info("Installing playwright...")
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "playwright"])
-
-    # Check if Chromium is installed
-    try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            # Just check if we can reference chromium
-            _ = p.chromium
-    except Exception:
-        logger.info("Installing Playwright Chromium browser...")
-        import subprocess
-        subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
 
 
 def run_monitor(skip_facebook: bool = False):
@@ -206,19 +312,8 @@ def main():
         action="store_true",
         help="Skip Facebook Marketplace (Craigslist only)",
     )
-    parser.add_argument(
-        "--check-deps",
-        action="store_true",
-        help="Check and install dependencies, then exit",
-    )
 
     args = parser.parse_args()
-
-    if args.check_deps:
-        check_dependencies()
-        print("Dependencies checked/installed")
-        return
-
     run_monitor(skip_facebook=args.skip_facebook)
 
 
