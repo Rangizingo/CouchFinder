@@ -26,6 +26,12 @@ from config import (
     USER_AGENT,
 )
 
+# Keywords that indicate the listing is actually a sofa/couch (not boots, cushions, etc.)
+FURNITURE_KEYWORDS = [
+    "sectional", "sofa", "couch", "loveseat", "chaise", "recliner",
+    "furniture", "seating", "living room", "seat sofa", "modular"
+]
+
 logger = logging.getLogger(__name__)
 
 
@@ -290,6 +296,13 @@ class FacebookScraper(BaseScraper):
                     img = card.find("img")
                     if img:
                         image_url = img.get("src")
+
+                # Filter: title must contain a furniture keyword to avoid false positives
+                # (e.g., "U-Shape" matching boots, cushions, stair balusters, etc.)
+                title_lower = title.lower()
+                if not any(kw in title_lower for kw in FURNITURE_KEYWORDS):
+                    logger.debug(f"Filtered out non-furniture listing: {title[:50]}")
+                    continue
 
                 listings.append(Listing(
                     id=listing_id,
