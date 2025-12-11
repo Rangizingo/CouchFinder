@@ -94,37 +94,44 @@ class FacebookScraper(BaseScraper):
         """Close headless browser and relaunch with visible window for login."""
         logger.info("Relaunching browser with visible window for login...")
 
-        # Close current context
+        # Close current context - storage_state saves cookies automatically for persistent context
         if self.context:
+            try:
+                # Force cookie flush by saving storage state before closing
+                self.context.storage_state(path=str(BROWSER_DATA_DIR / "storage_state.json"))
+            except Exception as e:
+                logger.debug(f"Could not save storage state: {e}")
             self.context.close()
             self.context = None
 
         self._initialized = False
         self._initialize_browser(headless=False)
 
-    def _is_logged_in(self) -> bool:
-        """Check if we're logged into Facebook."""
+    def _can_access_marketplace(self) -> bool:
+        """Check if we can access Facebook Marketplace (logged in or not)."""
         try:
             # Navigate to marketplace
             self.page.goto(FACEBOOK_MARKETPLACE_URL, wait_until="domcontentloaded", timeout=30000)
             time.sleep(2)
 
-            # Check for login indicators
-            current_url = self.page.url
+            # Dismiss any login popup that appears
+            self._dismiss_login_popup()
 
-            # If redirected to login page
-            if "login" in current_url.lower():
+            # Check if we got redirected to a hard login wall (not just a popup)
+            current_url = self.page.url
+            if "login" in current_url.lower() and "checkpoint" in current_url.lower():
+                # Hard block - need to actually log in
                 return False
 
-            # Check for marketplace content
+            # Check for marketplace content - we can browse without login
             content = self.page.content()
-            if "Marketplace" in content and "login" not in current_url.lower():
+            if "Marketplace" in content:
                 return True
 
             return False
 
         except Exception as e:
-            logger.error(f"Error checking login status: {e}")
+            logger.error(f"Error checking marketplace access: {e}")
             return False
 
     def wait_for_manual_login(self, timeout_minutes: int = 5) -> bool:
@@ -316,16 +323,15 @@ class FacebookScraper(BaseScraper):
         if not self._initialized:
             self._initialize_browser(headless=True)
 
-        # Check login status first
-        if not self._is_logged_in():
-            logger.warning("Not logged in to Facebook")
-            # Relaunch with visible window for login
+        # Check if we can access marketplace (don't require login - just dismiss popup)
+        if not self._can_access_marketplace():
+            logger.warning("Cannot access Facebook Marketplace")
+            # Only relaunch for login if we hit a hard block (checkpoint)
             self._relaunch_visible()
             if not self.wait_for_manual_login():
                 logger.error("Facebook login failed, skipping Facebook scrape")
                 return []
             # After successful login, we can continue with the visible browser
-            # (next run will be headless since session is saved)
 
         all_listings = []
         page_seen_ids = set()  # Dedupe across search terms within this cycle
@@ -382,7 +388,9 @@ class FacebookScraper(BaseScraper):
             close_selectors = [
                 '[aria-label="Close"]',
                 'div[aria-label="Close"]',
+                'i[aria-label="Close"]',
                 'svg[aria-label="Close"]',
+                'div[role="dialog"] [role="button"]:first-child',  # First button in dialog (usually X)
                 'div[role="dialog"] div[role="button"]:has(svg)',  # X button in dialog
             ]
 
@@ -391,7 +399,7 @@ class FacebookScraper(BaseScraper):
                     close_btn = self.page.locator(selector).first
                     if close_btn.is_visible(timeout=1000):
                         close_btn.click()
-                        logger.debug("Dismissed login popup")
+                        logger.info("Dismissed login popup")
                         time.sleep(1)
                         return True
                 except Exception:
@@ -400,6 +408,17 @@ class FacebookScraper(BaseScraper):
             # Also try pressing Escape key to close any modal
             self.page.keyboard.press("Escape")
             time.sleep(0.5)
+
+            # Check if there's still a dialog and try clicking outside it
+            try:
+                dialog = self.page.locator('div[role="dialog"]').first
+                if dialog.is_visible(timeout=500):
+                    # Click outside the dialog to dismiss
+                    self.page.mouse.click(10, 10)
+                    time.sleep(0.5)
+                    logger.info("Clicked outside dialog to dismiss")
+            except Exception:
+                pass
 
         except Exception as e:
             logger.debug(f"No login popup to dismiss: {e}")
@@ -469,6 +488,12 @@ class FacebookScraper(BaseScraper):
         """Close browser and clean up."""
         try:
             if self.context:
+                try:
+                    # Force cookie flush by saving storage state before closing
+                    self.context.storage_state(path=str(BROWSER_DATA_DIR / "storage_state.json"))
+                    logger.debug("Saved storage state before closing")
+                except Exception as e:
+                    logger.debug(f"Could not save storage state: {e}")
                 self.context.close()
                 self.context = None
             if self._owns_playwright and self.playwright:
