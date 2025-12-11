@@ -123,15 +123,21 @@ class FacebookScraper(BaseScraper):
             # Dismiss any login popup that appears
             self._dismiss_login_popup()
 
-            # Check if we got redirected to a hard login wall (not just a popup)
+            # Check if we got redirected to a login page
             current_url = self.page.url
-            if "login" in current_url.lower() and "checkpoint" in current_url.lower():
-                # Hard block - need to actually log in
+
+            # Hard block - redirected to login or checkpoint page
+            if "/login" in current_url.lower() or "checkpoint" in current_url.lower():
+                logger.debug(f"Redirected to login: {current_url}")
                 return False
 
-            # Check for marketplace content - we can browse without login
+            # If URL starts with marketplace path, we're good
+            if "/marketplace" in current_url.lower():
+                return True
+
+            # Fallback: check page content for marketplace items
             content = self.page.content()
-            if "Marketplace" in content:
+            if "/marketplace/item/" in content:
                 return True
 
             return False
